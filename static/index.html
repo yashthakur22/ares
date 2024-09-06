@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas-GPT Integration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto bg-white p-8 rounded shadow">
+        <h1 class="text-2xl font-bold mb-4">Canvas-GPT Integration</h1>
+        <div id="userInfo" class="mb-4"></div>
+        <div class="mb-4">
+            <label for="prompt" class="block mb-2">Enter your question:</label>
+            <input type="text" id="prompt" class="w-full p-2 border rounded" placeholder="What is the capital of France?">
+        </div>
+        <button id="askButton" class="bg-blue-500 text-white px-4 py-2 rounded">Ask GPT</button>
+        <div id="response" class="mt-4"></div>
+        
+        <h2 class="text-xl font-bold mt-8 mb-4">Your Courses</h2>
+        <input type="text" id="courseFilter" class="w-full p-2 border rounded mb-4" placeholder="Filter courses...">
+        <div id="coursesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Fetch user info
+            const userResponse = await fetch('/user');
+            const userData = await userResponse.json();
+            document.getElementById('userInfo').textContent = `Logged in as: ${userData.user}`;
+
+            // Fetch courses
+            const coursesResponse = await fetch('/courses');
+            const coursesData = await coursesResponse.json();
+            const coursesList = document.getElementById('coursesList');
+            const courseFilter = document.getElementById('courseFilter');
+
+            function renderCourses(courses) {
+                coursesList.innerHTML = '';
+                courses.forEach(course => {
+                    const div = document.createElement('div');
+                    div.className = 'p-4 border rounded';
+                    div.textContent = course.name;
+                    coursesList.appendChild(div);
+                });
+            }
+
+            renderCourses(coursesData);
+
+            courseFilter.addEventListener('input', (e) => {
+                const filterText = e.target.value.toLowerCase();
+                const filteredCourses = coursesData.filter(course => 
+                    course.name.toLowerCase().includes(filterText)
+                );
+                renderCourses(filteredCourses);
+            });
+
+            // Handle ask button click
+            document.getElementById('askButton').addEventListener('click', async () => {
+                const prompt = document.getElementById('prompt').value;
+                const response = await fetch(`/ask?prompt=${encodeURIComponent(prompt)}`);
+                const data = await response.json();
+                document.getElementById('response').textContent = data.response;
+            });
+        });
+    </script>
+</body>
+</html>
