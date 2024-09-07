@@ -1,10 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.auth.canvas_auth import verify_token, test_canvas_connection, get_user_courses
+from app.auth.canvas_auth import verify_token, test_canvas_connection, get_favorite_courses, get_user_courses, get_detailed_course_info
 from app.llm.openai_integration import generate_response, test_openai_connection
-import time
+from app.ai_agents import process_courses
 import logging
 
 # Set up logging
@@ -14,6 +13,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not test_canvas_connection():
+        logger.error("Failed to connect to Canvas.")
         raise RuntimeError("Failed to connect to Canvas. Please check your .env file and network connection.")
     if not test_openai_connection():
         logger.warning("Failed to connect to OpenAI. The /ask endpoint may not work correctly.")
@@ -21,12 +21,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Mount the static directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/")
-async def root():
-    return FileResponse("static/index.html")
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/user")
 async def get_user():
@@ -34,17 +36,34 @@ async def get_user():
     return {"user": user_info["name"]}
 
 @app.get("/courses")
-async def courses():
+async def courses(all_courses: bool = Query(False, description="Set to true to fetch all courses instead of just favorites")):
     try:
-        courses_data = get_user_courses()
-        logger.info(f"Successfully retrieved {len(courses_data)} courses")
-        return courses_data
-    except HTTPException as he:
-        logger.error(f"HTTP error in /courses: {he.detail}")
-        raise he
+        if all_courses:
+            logger.info("Fetching all courses from Canvas...")
+            courses_data = get_user_courses()
+        else:
+            logger.info("Fetching favorite courses from Canvas...")
+            courses_data = get_favorite_courses()
+        
+        logger.info(f"Successfully retrieved {len(courses_data)} courses from Canvas")
+        
+        detailed_courses = []
+        for course in courses_data:
+            detailed_course = get_detailed_course_info(course['id'])
+            if detailed_course:
+                detailed_courses.append(detailed_course)
+            else:
+                logger.warning(f"Could not fetch detailed info for course {course['id']}. Using basic info.")
+                detailed_courses.append(course)
+        
+        logger.info("Processing and summarizing courses...")
+        summarized_courses = await process_courses(detailed_courses)
+        logger.info(f"Successfully processed and summarized {len(summarized_courses)} courses")
+        
+        return summarized_courses
     except Exception as e:
         logger.error(f"Unexpected error in /courses: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        return {"error": f"An unexpected error occurred: {str(e)}"}
 
 @app.get("/ask")
 async def ask_gpt(prompt: str):

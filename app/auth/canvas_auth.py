@@ -33,6 +33,45 @@ def verify_token():
         logger.error(f"Error verifying token: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
+def get_favorite_courses():
+    headers = {"Authorization": f"Bearer {CANVAS_ACCESS_TOKEN}"}
+    try:
+        response = requests.get(f"{CANVAS_API_URL}/api/v1/users/self/favorites/courses", headers=headers)
+        response.raise_for_status()
+        courses = response.json()
+        logger.info(f"Successfully retrieved {len(courses)} favorite courses")
+        return courses
+    except Exception as err:
+        logger.error(f"An error occurred while fetching favorite courses: {err}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(err)}")
+
+
+def get_detailed_course_info(course_id):
+    headers = {"Authorization": f"Bearer {CANVAS_ACCESS_TOKEN}"}
+    try:
+        # Fetch course details
+        course_response = requests.get(f"{CANVAS_API_URL}/api/v1/courses/{course_id}", headers=headers)
+        course_response.raise_for_status()
+        course_info = course_response.json()
+
+        # Fetch assignments
+        assignments_response = requests.get(f"{CANVAS_API_URL}/api/v1/courses/{course_id}/assignments", headers=headers)
+        assignments_response.raise_for_status()
+        course_info['assignments'] = assignments_response.json()
+
+        # Fetch modules
+        modules_response = requests.get(f"{CANVAS_API_URL}/api/v1/courses/{course_id}/modules", headers=headers)
+        modules_response.raise_for_status()
+        course_info['modules'] = modules_response.json()
+
+        logger.info(f"Successfully retrieved detailed info for course {course_id}")
+        return course_info
+    except requests.HTTPError as http_err:
+        logger.error(f"HTTP error occurred while fetching detailed course info for course {course_id}: {http_err}")
+        return None
+    except Exception as err:
+        logger.error(f"An error occurred while fetching detailed course info for course {course_id}: {err}")
+        return None
 def get_user_courses():
     headers = {"Authorization": f"Bearer {CANVAS_ACCESS_TOKEN}"}
     all_courses = []
