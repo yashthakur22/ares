@@ -1,36 +1,21 @@
-import os
-from openai import OpenAI
-from dotenv import load_dotenv
-import asyncio
+import openai
+from app.config import settings
 
-load_dotenv()
+openai.api_key = settings.OPENAI_API_KEY
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-async def generate_response(prompt: str):
+async def summarize_course(course):
+    prompt = f"Summarize the following course in 2-3 sentences:\n\nName: {course['name']}\nCode: {course.get('course_code', 'N/A')}"
+    
     try:
-        response = await asyncio.to_thread(
-            client.chat.completions.create,
+        response = await openai.ChatCompletion.acreate(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "You are a helpful assistant that summarizes course information concisely."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=150
+            max_tokens=100
         )
-        return response.choices[0].message.content.strip()
+        return response.choices[0].message['content'].strip()
     except Exception as e:
-        return f"An error occurred while generating the response: {str(e)}"
-
-def test_openai_connection():
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": "Hello, are you working?"}],
-            max_tokens=10
-        )
-        print("OpenAI connection successful!")
-        return True
-    except Exception as e:
-        print(f"Error connecting to OpenAI: {str(e)}")
-        return False
+        print(f"Error summarizing course: {str(e)}")
+        return "Unable to generate summary."
